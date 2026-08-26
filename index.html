@@ -1618,5 +1618,66 @@
             link.click();
         }
     </script>
+    <!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>弓道 看的システム</title>
+    <!-- CSSやデザインの設定... -->
+</head>
+<body>
+
+    <!-- 画面の表示要素（ボタンや的中表など）... -->
+
+    <!-- ★ JavaScript（プログラム）を書くエリア ★ -->
+    <script>
+        
+        // ==========================================
+        // ↓↓↓ ここに先ほどのコードを貼り付けます！ ↓↓↓
+        // ==========================================
+
+        const GAS_URL = "https://script.google.com/macros/s/YOUR_GAS_ID/exec";
+
+        async function saveToGoogleSheet(appData) {
+            try {
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(appData)
+                });
+                const result = await response.json();
+                if (result.status === "success") {
+                    console.log("スプレッドシート同期成功");
+                    return true;
+                }
+            } catch (error) {
+                console.error("同期エラー:", error);
+            }
+            return false;
+        }
+
+        async function loadFromGoogleSheet() {
+            try {
+                const response = await fetch(GAS_URL);
+                if (response.ok) {
+                    const data = await response.json();
+                    return data;
+                }
+            } catch (error) {
+                console.error("データ取得エラー:", error);
+            }
+            return null;
+        }
+
+        // ==========================================
+        // ↑↑↑ ここまで ↑↑↑
+        // ==========================================
+
+        // 元々書いてある既存のJavaScriptの処理...
+
+    </script>
+</body>
+</html>
 </body>
 </html>
