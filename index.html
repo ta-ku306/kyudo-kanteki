@@ -678,7 +678,7 @@
             } catch (e) {
                 console.error("Local storage error:", e);
             }
-            saveCurrentSessionToCloud();
+            saveToGoogleSheet({ sessions: window.appState.sessions });
         };
 
         window.changeSessionDateSync = function(dateStr) {
