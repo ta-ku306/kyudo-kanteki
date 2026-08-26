@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>弓道 看的デジタルシステム (クラウドリアルタイム同期版)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        kyudo: {
+                            wood: '#8B4513',
+                            darkwood: '#5C2C0C',
+                            tatami: '#E0D8B0',
+                            red: '#CC3333',
+                            green: '#2E7D32',
+                            gold: '#D4AF37'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', 'Shippori Mincho', sans-serif;
+            background-color: #f1f5f9;
+        }
+        .kyudo-font {
+            font-family: 'Shippori Mincho', serif;
+        }
+        canvas {
+            touch-action: none;
+        }
+        
+        /* 1ページ集約用の印刷 (PDF) スタイル */
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 6mm;
+            }
+            body {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                font-size: 9pt;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block !important;
+            }
+            .print-card {
+                box-shadow: none !important;
+                border: 1px solid #64748b !important;
+                page-break-inside: avoid;
+            }
+            table {
+                font-size: 8pt !important;
+            }
+            th, td {
+                padding: 2px 3px !important;
+            }
+        }
+        .print-only {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- ヘッダー -->
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-50 no-print">
+        <div class="max-w-7xl mx-auto px-4 py-2.5 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-red-700 flex items-center justify-center font-bold text-xl border-2 border-amber-400">
+                    射
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="text-lg md:text-xl font-bold tracking-wider kyudo-font">弓道 看的システム</h1>
+                        <!-- クラウドリアルタイム同期バッジ -->
+                        <span id="sync-status-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center space-x-1">
+                            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                            <span>接続中...</span>
+                        </span>
+                    </div>
+                    <p class="text-[10px] text-slate-400">Teams / OneDrive Real-time Cloud Score System</p>
+                </div>
+            </div>
+
+            <!-- タブナビゲーション -->
+            <nav class="hidden md:flex space-x-1">
+                <button onclick="switchTab('input')" id="tab-btn-input" class="px-3 py-2 rounded-lg text-sm font-medium transition bg-slate-700 text-white flex items-center space-x-2">
+                    <i class="fa-solid fa-bullseye text-red-400"></i>
+                    <span>看的・リアルタイム入力</span>
+                </button>
+                <button onclick="switchTab('scoreboard')" id="tab-btn-scoreboard" class="px-3 py-2 rounded-lg text-sm font-medium transition text-slate-300 hover:bg-slate-800 flex items-center space-x-2">
+                    <i class="fa-solid fa-table-cells"></i>
+                    <span>的中記録表</span>
+                </button>
+                <button onclick="switchTab('analytics')" id="tab-btn-analytics" class="px-3 py-2 rounded-lg text-sm font-medium transition text-slate-300 hover:bg-slate-800 flex items-center space-x-2">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>期間集計・矢どころ分析</span>
+                </button>
+                <button onclick="switchTab('timer')" id="tab-btn-timer" class="px-3 py-2 rounded-lg text-sm font-medium transition text-slate-300 hover:bg-slate-800 flex items-center space-x-2">
+                    <i class="fa-solid fa-stopwatch"></i>
+                    <span>タイマー</span>
+                </button>
+            </nav>
+
+            <div class="flex items-center space-x-2">
+                <button onclick="triggerPrint()" title="A4 1ページ印刷 / PDF" class="px-3 py-1.5 bg-red-700 text-white text-xs font-semibold rounded-lg hover:bg-red-800 transition flex items-center space-x-1 shadow-sm">
+                    <i class="fa-solid fa-print"></i>
+                    <span class="hidden sm:inline">印刷/PDF</span>
+                </button>
+                <button onclick="openModal('settings-modal')" title="設定" class="p-2 text-slate-300 hover:text-white bg-slate-800 rounded-lg border border-slate-700 hover:bg-slate-700 transition">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- モバイル用下部ナビゲーション -->
+        <div class="md:hidden flex justify-around border-t border-slate-800 py-2 bg-slate-900 text-xs">
+            <button onclick="switchTab('input')" id="mob-btn-input" class="flex flex-col items-center text-red-400">
+                <i class="fa-solid fa-bullseye text-lg"></i>
+                <span>看的入力</span>
+            </button>
+            <button onclick="switchTab('scoreboard')" id="mob-btn-scoreboard" class="flex flex-col items-center text-slate-400">
+                <i class="fa-solid fa-table-cells text-lg"></i>
+                <span>的中表</span>
+            </button>
+            <button onclick="switchTab('analytics')" id="mob-btn-analytics" class="flex flex-col items-center text-slate-400">
+                <i class="fa-solid fa-chart-line text-lg"></i>
+                <span>期間集計</span>
+            </button>
+            <button onclick="switchTab('timer')" id="mob-btn-timer" class="flex flex-col items-center text-slate-400">
+                <i class="fa-solid fa-stopwatch text-lg"></i>
+                <span>タイマー</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto p-3 md:p-6">
+
+        <!-- 印刷時のヘッダー表示 -->
+        <div class="print-only mb-3 border-b-2 border-slate-800 pb-2">
+            <div class="flex justify-between items-end">
+                <div>
+                    <h1 id="print-title-display" class="text-xl font-bold kyudo-font">弓道 看的・的中成績記録表</h1>
+                    <p class="text-[10px] text-slate-600"><span id="print-date-label">記録日</span>: <span id="print-date-display">2026-08-26</span> | クラウド自動同期出力</p>
+                </div>
+                <div class="text-right">
+                    <span class="text-[10px] font-bold border border-slate-800 px-2 py-0.5 rounded">弓道看的デジタル記録</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 1. 看的・入力画面 (Input Tab) -->
+        <section id="tab-input" class="space-y-4">
+            <!-- 日付 ＆ 立ちコントロールバー -->
+            <div class="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-wrap gap-3 justify-between items-center no-print">
+                <div class="flex flex-wrap items-center gap-3">
+                    <!-- 日付選択 -->
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase">記録日</label>
+                        <input type="date" id="input-session-date" onchange="changeSessionDate(this.value)" class="mt-0.5 font-bold text-sm bg-slate-50 border border-slate-300 text-slate-800 rounded-lg p-1.5 focus:ring-2 focus:ring-slate-900">
+                    </div>
+
+                    <!-- 立ち選択 -->
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase">立ち番号</label>
+                        <select id="select-tachi" onchange="changeCurrentTachi(this.value)" class="mt-0.5 font-bold text-sm bg-slate-50 border border-slate-300 text-slate-800 rounded-lg p-1.5 focus:ring-2 focus:ring-slate-900">
+                            <option value="1">第 1 立目</option>
+                            <option value="2">第 2 立目</option>
+                            <option value="3">第 3 立目</option>
+                            <option value="4">第 4 立目</option>
+                            <option value="5">第 5 立目</option>
+                            <option value="6">第 6 立目</option>
+                            <option value="7">第 7 立目</option>
+                            <option value="8">第 8 立目</option>
+                            <option value="9">第 9 立目</option>
+                            <option value="10">第 10 立目</option>
+                        </select>
+                    </div>
+
+                    <!-- 的の種類 -->
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase">的の種類</label>
+                        <select id="select-target-type" onchange="changeTargetType(this.value)" class="mt-0.5 font-semibold text-xs bg-slate-50 border border-slate-300 text-slate-800 rounded-lg p-2">
+                            <option value="kasumi">近的 霞的（36cm）</option>
+                            <option value="iro">近的 彩色の</option>
+                            <option value="entei">遠的（100cm）</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button onclick="addNewArcherToCurrentDate()" class="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1 shadow-sm">
+                        <i class="fa-solid fa-user-plus"></i>
+                        <span>生徒を追加 (+1名)</span>
+                    </button>
+                    <button onclick="showConfirmToast('選択中の生徒のこの立ちの射をクリアしますか？', clearCurrentArcherShots)" class="px-2.5 py-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 text-xs font-semibold transition">
+                        <i class="fa-solid fa-rotate-left mr-1"></i> クリア
+                    </button>
+                </div>
+            </div>
+
+            <!-- メイン入力エリア (看的盤 ＆ 選手・射矢操作) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+                <!-- 左側：看的盤（霞的キャンバス）-->
+                <div class="lg:col-span-6 bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col items-center justify-between">
+                    <div class="w-full flex justify-between items-center mb-1">
+                        <h2 class="text-sm font-bold text-slate-800 flex items-center">
+                            <i class="fa-solid fa-crosshairs text-red-600 mr-2"></i> 看的盤（着弾位置をタップ/クリック）
+                        </h2>
+                        <span class="text-[11px] bg-red-50 text-red-700 px-2 py-0.5 rounded font-bold border border-red-200">
+                            内側 ◯ / 外側 ✕
+                        </span>
+                    </div>
+
+                    <!-- 的キャンバス -->
+                    <div class="relative w-full max-w-[380px] aspect-square flex items-center justify-center my-2">
+                        <canvas id="targetCanvas" class="w-full h-full cursor-crosshair rounded-full shadow-md border-4 border-slate-800"></canvas>
+                    </div>
+
+                    <div class="w-full pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+                        <span class="text-slate-500 text-[11px]">※タップで自動同期・全端末へ即時反映</span>
+                        <button onclick="undoLastShot()" class="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md font-semibold text-xs">
+                            <i class="fa-solid fa-undo mr-1"></i> 取消
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 右側：選手選択 & 矢番＆手動入力 -->
+                <div class="lg:col-span-6 flex flex-col space-y-4">
+
+                    <!-- 選手選択グリッド（スクロール可能、最大30名以上対応） -->
+                    <div class="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                生徒（選手）選択 (全<span id="archer-count-badge">5</span>名)
+                            </h3>
+                            <span class="text-[11px] text-slate-400">タップして切り替え</span>
+                        </div>
+                        <div id="archer-selector-grid" class="grid grid-cols-3 sm:grid-cols-5 gap-1.5 max-h-[180px] overflow-y-auto p-1 border border-slate-100 rounded-lg bg-slate-50">
+                        </div>
+                    </div>
+
+                    <!-- 射矢選択 (1矢〜4矢) -->
+                    <div class="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">射矢選択</h3>
+                        <div id="arrow-selector-grid" class="grid grid-cols-4 gap-2">
+                        </div>
+                    </div>
+
+                    <!-- 操作ステータス ＆ 手動◯✕ボタン -->
+                    <div class="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex-grow flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex-grow mr-2">
+                                    <span class="text-xs text-slate-500 block">現在選択中の操作対象:</span>
+                                    <div class="flex items-center space-x-2 mt-0.5">
+                                        <h4 id="current-target-label" class="text-lg font-bold text-slate-800 kyudo-font">
+                                            1番手 - 第1矢
+                                        </h4>
+                                        <button onclick="editCurrentArcherNameInline()" title="生徒名を変更" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs font-semibold border border-slate-300">
+                                            <i class="fa-solid fa-pen mr-1"></i>名前変更
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="current-result-badge" class="px-3 py-1 rounded-full font-bold text-base bg-slate-100 text-slate-400 shrink-0">
+                                    未入力
+                                </div>
+                            </div>
+
+                            <p class="text-xs text-slate-500 mb-2">直接◯✕を手動で指定（座標なし的中記録）:</p>
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <button onclick="setManualResult('hit')" class="py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-base shadow-sm flex items-center justify-center space-x-2">
+                                    <i class="fa-regular fa-circle text-xl"></i>
+                                    <span>的中 ( ◯ )</span>
+                                </button>
+                                <button onclick="setManualResult('miss')" class="py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg font-bold text-base shadow-sm flex items-center justify-center space-x-2">
+                                    <i class="fa-solid fa-xmark text-xl"></i>
+                                    <span>はずれ ( ✕ )</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 自動送り ＆ ナビゲーションキー -->
+                        <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                            <label class="flex items-center cursor-pointer text-xs font-medium text-slate-600">
+                                <input type="checkbox" id="auto-advance-check" checked class="rounded border-slate-300 text-slate-900 focus:ring-slate-900 mr-2">
+                                入力後に自動で次の矢/生徒へ移動
+                            </label>
+                            <div class="flex space-x-1">
+                                <button onclick="navigateArcher(-1)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-bold">
+                                    前生徒
+                                </button>
+                                <button onclick="navigateArcher(1)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-bold">
+                                    次生徒
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- 2. 的中表（Scoreboard Tab） -->
+        <section id="tab-scoreboard" class="hidden space-y-4">
+            <div class="bg-white rounded-xl shadow-sm p-4 md:p-6 border border-slate-200 print-card">
+                <div class="flex flex-col md:flex-row md:items-center justify-between pb-3 mb-3 border-b border-slate-200 gap-3 no-print">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800 kyudo-font">的中記録表（生徒別横一覧）</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">生徒ごとに1行でまとめ、第1立・第2立...と横方向に結果と総的中数が表示されます</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="triggerPrint()" class="px-3 py-1.5 bg-red-700 text-white rounded-lg text-xs font-semibold hover:bg-red-800 transition flex items-center space-x-1">
+                            <i class="fa-solid fa-file-pdf"></i>
+                            <span>A4 1ページ印刷 / PDF</span>
+                        </button>
+                        <button onclick="exportToCSV()" class="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-semibold hover:bg-slate-700 transition flex items-center space-x-1">
+                            <i class="fa-solid fa-file-csv"></i>
+                            <span>CSV出力 (OneDrive保存用)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-center border-collapse border border-slate-300">
+                        <thead id="scoreboard-table-head" class="bg-slate-900 text-white text-xs">
+                        </thead>
+                        <tbody id="scoreboard-table-body" class="text-sm divide-y divide-slate-200 font-medium">
+                        </tbody>
+                        <tfoot id="scoreboard-table-foot" class="bg-slate-100 font-bold text-slate-800">
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. 期間集計・矢どころ分析 (Analytics Tab) -->
+        <section id="tab-analytics" class="hidden space-y-4">
+            <div class="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-wrap gap-3 justify-between items-center no-print">
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-calendar-days text-amber-600 text-lg"></i>
+                        <label class="text-xs font-bold text-slate-700">集計対象期間:</label>
+                    </div>
+                    <select id="analytics-period-select" onchange="renderAnalytics()" class="bg-slate-50 border border-slate-300 text-slate-800 rounded-lg p-2 text-xs font-bold focus:ring-2 focus:ring-slate-900">
+                        <option value="today">本日のみ</option>
+                        <option value="10days">直近 10 日間</option>
+                        <option value="30days" selected>直近 1 か月（30日間）</option>
+                        <option value="all">全期間（累計）</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button onclick="triggerAnalyticsPrint()" class="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-sm">
+                        <i class="fa-solid fa-file-pdf"></i>
+                        <span>期間集計表を1ページ印刷 / PDF</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 全体統計サマリーカード -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 print-card">
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                    <span class="text-[10px] text-slate-500 font-bold block">期間総行射数</span>
+                    <span id="stat-total-shots" class="text-xl font-bold text-slate-800">0</span>
+                </div>
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                    <span class="text-[10px] text-slate-500 font-bold block">総的中数 / 的中率</span>
+                    <div class="flex items-baseline space-x-1">
+                        <span id="stat-hits" class="text-xl font-bold text-red-600">0</span>
+                        <span class="text-xs text-slate-500">(<span id="stat-accuracy">0%</span>)</span>
+                    </div>
+                </div>
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                    <span class="text-[10px] text-slate-500 font-bold block">皆中 (4中) 総回数/率</span>
+                    <div class="flex items-baseline space-x-1">
+                        <span id="stat-kaichu" class="text-xl font-bold text-amber-600">0</span>
+                        <span class="text-xs text-slate-500">(<span id="stat-kaichu-rate">0%</span>)</span>
+                    </div>
+                </div>
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                    <span class="text-[10px] text-slate-500 font-bold block">半矢 (2中) 総回数/率</span>
+                    <div class="flex items-baseline space-x-1">
+                        <span id="stat-hanya" class="text-xl font-bold text-blue-700">0</span>
+                        <span class="text-xs text-slate-500">(<span id="stat-hanya-rate">0%</span>)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 生徒全員一括成績表 ＆ 矢どころ分析 -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                <div class="lg:col-span-7 bg-white rounded-xl shadow-sm p-4 border border-slate-200 print-card">
+                    <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+                        <h3 class="text-sm font-bold text-slate-800 flex items-center">
+                            <i class="fa-solid fa-users text-slate-700 mr-2"></i> 生徒別 期間成績一覧表（全員一括）
+                        </h3>
+                        <span class="text-[11px] text-slate-500 font-medium">※全行射(4射)対象</span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-center border-collapse border border-slate-300 text-xs">
+                            <thead>
+                                <tr class="bg-slate-900 text-white">
+                                    <th class="p-2 border border-slate-700 text-left px-3">生徒（選手）名</th>
+                                    <th class="p-2 border border-slate-700">総射数</th>
+                                    <th class="p-2 border border-slate-700">的中数</th>
+                                    <th class="p-2 border border-slate-700">的中率</th>
+                                    <th class="p-2 border border-slate-700">皆中(4中)数/率</th>
+                                    <th class="p-2 border border-slate-700">半矢(2中)数/率</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analytics-table-body" class="font-medium text-slate-800">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-5 bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col items-center justify-between print-card">
+                    <div class="w-full">
+                        <div class="flex justify-between items-center mb-2 pb-2 border-b border-slate-100">
+                            <h3 class="text-sm font-bold text-slate-800 flex items-center">
+                                <i class="fa-solid fa-crosshairs text-red-600 mr-2"></i> 全体 矢どころ重ね合わせ
+                            </h3>
+                            <div class="flex items-center space-x-2 text-[10px]">
+                                <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-red-600 inline-block mr-1"></span>◯</span>
+                                <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-slate-700 inline-block mr-1"></span>✕</span>
+                                <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full border-2 border-amber-500 inline-block mr-1"></span>重心</span>
+                            </div>
+                        </div>
+
+                        <div class="relative w-full max-w-[280px] aspect-square mx-auto my-1">
+                            <canvas id="analyticsCanvas" class="w-full h-full rounded-full shadow-inner border-2 border-slate-800"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="w-full mt-3 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                        <h4 class="font-bold flex items-center mb-1 text-amber-800 text-[11px]">
+                            <i class="fa-solid fa-lightbulb mr-1.5"></i> 全体傾向アシスト
+                        </h4>
+                        <p id="analytics-advice-text" class="leading-relaxed text-amber-800 text-[11px]">
+                            集計データから重心の偏りや全体傾向を表示します。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. 行射タイマー (Timer Tab) -->
+        <section id="tab-timer" class="hidden space-y-4 no-print">
+            <div class="max-w-xl mx-auto bg-white rounded-xl shadow-sm p-6 border border-slate-200 text-center">
+                <h2 class="text-xl font-bold text-slate-800 kyudo-font mb-1">行射カウントダウンタイマー</h2>
+                <p class="text-xs text-slate-500 mb-4">競技・競射の立ち時間制限計測用タイマー</p>
+
+                <div class="text-6xl font-mono font-bold tracking-tight text-slate-900 my-6 py-4 bg-slate-50 rounded-xl border border-slate-200" id="timer-display">
+                    05:00
+                </div>
+
+                <div class="flex justify-center space-x-3 mb-6">
+                    <button id="timer-start-btn" onclick="toggleTimer()" class="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow transition text-base flex items-center space-x-2">
+                        <i class="fa-solid fa-play" id="timer-icon"></i>
+                        <span id="timer-btn-text">スタート</span>
+                    </button>
+                    <button onclick="resetTimer()" class="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition text-base">
+                        リセット
+                    </button>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase block mb-2">時間プリセット</span>
+                    <div class="flex flex-wrap justify-center gap-2">
+                        <button onclick="setTimerPreset(300)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg">5分 (団体3人)</button>
+                        <button onclick="setTimerPreset(420)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg">7分 (団体5人)</button>
+                        <button onclick="setTimerPreset(240)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg">4分 (個人4矢)</button>
+                        <button onclick="setTimerPreset(120)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg">2分 (競射1矢)</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 設定・生徒名編集モーダル -->
+    <div id="settings-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-200">
+            <div class="bg-slate-900 text-white p-4 flex justify-between items-center">
+                <h3 class="font-bold text-base flex items-center">
+                    <i class="fa-solid fa-sliders mr-2"></i> 設定・生徒名編集
+                </h3>
+                <button onclick="closeModal('settings-modal')" class="text-slate-400 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                <div class="flex justify-between items-center">
+                    <label class="block text-xs font-bold text-slate-500 uppercase">生徒（選手）登録・編集</label>
+                    <button onclick="addNewArcherToCurrentDate()" class="px-2.5 py-1 bg-emerald-700 text-white rounded text-xs font-bold hover:bg-emerald-800">
+                        + 生徒を追加
+                    </button>
+                </div>
+
+                <div id="archer-names-inputs" class="space-y-2">
+                </div>
+
+                <div class="pt-3 border-t border-slate-200 space-y-2">
+                    <button onclick="showConfirmToast('当日の全生徒・立ちの記録データを削除しますか？', clearAllData)" class="w-full py-2 bg-red-100 text-red-700 hover:bg-red-200 font-bold rounded-lg transition text-xs">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> 当日の全記録データをクリア
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 p-3 border-t border-slate-200 flex justify-end">
+                <button onclick="closeModal('settings-modal')" class="px-4 py-1.5 bg-slate-900 text-white font-bold rounded-lg text-xs">
+                    完了
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- カスタム確認ダイアログ（alert/confirm代替） -->
+    <div id="confirm-toast-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-xl max-w-sm w-full p-5 shadow-xl border border-slate-200 text-center space-y-4">
+            <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-circle-question"></i>
+            </div>
+            <h4 id="confirm-toast-message" class="text-sm font-bold text-slate-800">確認</h4>
+            <div class="flex justify-center space-x-3">
+                <button onclick="closeModal('confirm-toast-modal')" class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold">
+                    キャンセル
+                </button>
+                <button id="confirm-toast-action-btn" class="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow">
+                    実行する
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Cloud Sync Core Module -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 環境設定の取得
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'kyudo-kanteki-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-api-key",
+            authDomain: "demo.firebaseapp.com",
+            projectId: "demo-project",
+            storageBucket: "demo.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+        const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Firebase初期化
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+        let unsubscribeDocListener = null;
+
+        const TODAY_STR = new Date().toISOString().split('T')[0];
+        const STORAGE_KEY = 'kyudo_kanteki_data_v3';
+
+        // グローバルアプリ状態
+        window.appState = {
+            currentDate: TODAY_STR,
+            currentTachi: 1, // 1 ~ 10
+            selectedArcherIndex: 0,
+            selectedArrowIndex: 0,
+            targetType: 'kasumi', // 'kasumi', 'iro', 'entei'
+            sessions: {}
+        };
+
+        // 認証およびFirestoreリアルタイムリスナー起動 (RULE 3)
+        async function initAuthAndSync() {
+            try {
+                if (authToken) {
+                    const cred = await signInWithCustomToken(auth, authToken);
+                    currentUser = cred.user;
+                } else {
+                    const cred = await signInAnonymously(auth);
+                    currentUser = cred.user;
+                }
+                updateSyncBadge('online', 'リアルタイム同期中');
+            } catch (err) {
+                console.warn("Cloud Auth Notice (fallback to anonymous/offline):", err);
+                try {
+                    const cred = await signInAnonymously(auth);
+                    currentUser = cred.user;
+                    updateSyncBadge('online', 'リアルタイム同期中');
+                } catch(e) {
+                    updateSyncBadge('offline', 'ローカル保存のみ');
+                }
+            }
+
+            ensureCurrentSessionExists();
+            subscribeToSessionDoc(window.appState.currentDate);
+        }
+
+        function updateSyncBadge(status, text) {
+            const badge = document.getElementById('sync-status-badge');
+            if (!badge) return;
+            if (status === 'online') {
+                badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1";
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>${text}</span>`;
+            } else {
+                badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/20 text-slate-300 border border-slate-500/30 flex items-center space-x-1";
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-400"></span><span>${text}</span>`;
+            }
+        }
+
+        function subscribeToSessionDoc(dateStr) {
+            if (unsubscribeDocListener) {
+                unsubscribeDocListener();
+                unsubscribeDocListener = null;
+            }
+
+            if (!currentUser) return;
+
+            // MANDATORY RULE 1: STRICT PATH
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'kyudo_sessions', dateStr);
+
+            unsubscribeDocListener = onSnapshot(docRef, (snap) => {
+                if (snap.exists()) {
+                    const data = snap.data();
+                    window.appState.sessions[dateStr] = data;
+                } else {
+                    saveCurrentSessionToCloud();
+                }
+
+                window.initUI();
+                window.drawTargetCanvas();
+                window.renderScoreboard();
+                window.renderAnalytics();
+            }, (error) => {
+                console.error("Firestore sync error:", error);
+                updateSyncBadge('offline', '同期エラー (ローカル保存)');
+            });
+        }
+
+        async function saveCurrentSessionToCloud() {
+            if (!currentUser) return;
+            const dateStr = window.appState.currentDate;
+            const session = window.appState.sessions[dateStr];
+            if (!session) return;
+
+            try {
+                // MANDATORY RULE 1: STRICT PATH
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'kyudo_sessions', dateStr);
+                await setDoc(docRef, session, { merge: true });
+            } catch (err) {
+                console.error("Failed to sync session to cloud:", err);
+            }
+        }
+
+        window.saveDataToLocalAndCloud = function() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({ sessions: window.appState.sessions }));
+            } catch (e) {
+                console.error("Local storage error:", e);
+            }
+            saveCurrentSessionToCloud();
+        };
+
+        window.changeSessionDateSync = function(dateStr) {
+            if (!dateStr) return;
+            window.appState.currentDate = dateStr;
+            ensureCurrentSessionExists();
+            window.appState.selectedArcherIndex = 0;
+            window.appState.selectedArrowIndex = 0;
+
+            subscribeToSessionDoc(dateStr);
+            window.initUI();
+            window.drawTargetCanvas();
+            window.renderScoreboard();
+            window.renderAnalytics();
+        };
+
+        function ensureCurrentSessionExists() {
+            if (!window.appState.sessions[window.appState.currentDate]) {
+                window.appState.sessions[window.appState.currentDate] = {
+                    archers: ["1番手 (大前)", "2番手 (二的)", "3番手 (中立)", "4番手 (落前)", "5番手 (大落)"],
+                    shots: {}
+                };
+            }
+        }
+
+        // 起動処理
+        window.onload = function() {
+            loadSavedLocalData();
+            document.getElementById('input-session-date').value = window.appState.currentDate;
+            window.initUI();
+            window.drawTargetCanvas();
+            window.renderScoreboard();
+            window.renderAnalytics();
+
+            initAuthAndSync();
+        };
+
+        function loadSavedLocalData() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && parsed.sessions) {
+                        window.appState.sessions = parsed.sessions;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load local storage:", e);
+            }
+        }
+    </script>
+
+    <script>
+        // タイマー変数
+        let timerSeconds = 300;
+        let timerInterval = null;
+        let isTimerRunning = false;
+
+        function getCurrentSession() {
+            const dateStr = window.appState.currentDate;
+            if (!window.appState.sessions[dateStr]) {
+                window.appState.sessions[dateStr] = {
+                    archers: ["1番手 (大前)", "2番手 (二的)", "3番手 (中立)", "4番手 (落前)", "5番手 (大落)"],
+                    shots: {}
+                };
+            }
+            return window.appState.sessions[dateStr];
+        }
+
+        function initUI() {
+            renderArcherSelectors();
+            renderArrowSelectors();
+            renderSettingsArcherInputs();
+            updateCurrentSelectionDisplay();
+        }
+
+        function changeSessionDate(dateStr) {
+            if (window.changeSessionDateSync) {
+                window.changeSessionDateSync(dateStr);
+            }
+        }
+
+        function switchTab(tabName) {
+            const tabs = ['input', 'scoreboard', 'analytics', 'timer'];
+            tabs.forEach(t => {
+                const sec = document.getElementById(`tab-${t}`);
+                const btn = document.getElementById(`tab-btn-${t}`);
+                const mobBtn = document.getElementById(`mob-btn-${t}`);
+                if (t === tabName) {
+                    sec.classList.remove('hidden');
+                    if (btn) btn.classList.add('bg-slate-700', 'text-white');
+                    if (mobBtn) mobBtn.classList.replace('text-slate-400', 'text-red-400');
+                } else {
+                    sec.classList.add('hidden');
+                    if (btn) btn.classList.remove('bg-slate-700', 'text-white');
+                    if (mobBtn) mobBtn.classList.replace('text-red-400', 'text-slate-400');
+                }
+            });
+
+            if (tabName === 'input') drawTargetCanvas();
+            if (tabName === 'scoreboard') renderScoreboard();
+            if (tabName === 'analytics') renderAnalytics();
+        }
+
+        function renderArcherSelectors() {
+            const session = getCurrentSession();
+            const container = document.getElementById('archer-selector-grid');
+            if (!container) return;
+            document.getElementById('archer-count-badge').innerText = session.archers.length;
+            container.innerHTML = '';
+
+            session.archers.forEach((name, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `py-1.5 px-2 rounded-lg font-bold text-xs border transition truncate ${
+                    idx === window.appState.selectedArcherIndex
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`;
+                btn.onclick = () => {
+                    window.appState.selectedArcherIndex = idx;
+                    renderArcherSelectors();
+                    updateCurrentSelectionDisplay();
+                    drawTargetCanvas();
+                };
+                btn.innerText = `${idx + 1}. ${name}`;
+                container.appendChild(btn);
+            });
+        }
+
+        function addNewArcherToCurrentDate() {
+            const session = getCurrentSession();
+            const newIndex = session.archers.length + 1;
+            let defaultName = `${newIndex}番手`;
+            session.archers.push(defaultName);
+
+            renderArcherSelectors();
+            renderSettingsArcherInputs();
+            if (window.saveDataToLocalAndCloud) window.saveDataToLocalAndCloud();
+        }
+
+        function renderArrowSelectors() {
+            const container = document.getElementById('arrow-selector-grid');
+            if (!container) return;
+            container.innerHTML = '';
+
+            for (let i = 0; i < 4; i++) {
+                const btn = document.createElement('button');
+                btn.className = `py-2 rounded-lg font-bold text-xs border transition ${
+                    i === window.appState.selectedArrowIndex
+                        ? 'bg-red-700 text-white border-red-700 shadow-sm'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`;
+                btn.innerText = `第 ${i + 1} 矢`;
+                btn.onclick = () => {
+                    window.appState.selectedArrowIndex = i;
+                    renderArrowSelectors();
+                    updateCurrentSelectionDisplay();
+                    drawTargetCanvas();
+                };
+                container.appendChild(btn);
+            }
+        }
+
+        function editCurrentArcherNameInline() {
+            const session = getCurrentSession();
+            const currentName = session.archers[window.appState.selectedArcherIndex] || '';
+            const newName = prompt("生徒の名前を入力してください:", currentName);
+            if (newName !== null && newName.trim() !== "") {
+                session.archers[window.appState.selectedArcherIndex] = newName.trim();
+                renderArcherSelectors();
+                renderSettingsArcherInputs();
+                updateCurrentSelectionDisplay();
+                if (window.saveDataToLocalAndCloud) window.saveDataToLocalAndCloud();
+            }
+        }
+
+        function updateCurrentSelectionDisplay() {
+            const session = getCurrentSession();
+            const archerName = session.archers[window.appState.selectedArcherIndex] || `${window.appState.selectedArcherIndex + 1}番手`;
+            const arrowNum = window.appState.selectedArrowIndex + 1;
+            document.getElementById('current-target-label').innerText = `${window.appState.selectedArcherIndex + 1}. ${archerName} - 第${arrowNum}矢`;
+
+            const currentShot = getShot(window.appState.currentDate, window.appState.currentTachi, window.appState.selectedArcherIndex, window.appState.selectedArrowIndex);
+            const badge = document.getElementById('current-result-badge');
+
+            if (!currentShot) {
+                badge.innerText = '未入力';
+                badge.className = 'px-3 py-1 rounded-full font-bold text-sm bg-slate-100 text-slate-400';
+            } else if (currentShot.isHit) {
+                badge.innerText = '◯ 的中';
+                badge.className = 'px-3 py-1 rounded-full font-bold text-sm bg-red-100 text-red-700 border border-red-300';
+            } else {
+                badge.innerText = '✕ はずれ';
+                badge.className = 'px-3 py-1 rounded-full font-bold text-sm bg-slate-200 text-slate-700 border border-slate-300';
+            }
+        }
+
+        function getShot(dateStr, tachi, archerIdx, arrowIdx) {
+            const sess = window.appState.sessions[dateStr];
+            if (sess && sess.shots && sess.shots[tachi] && sess.shots[tachi][archerIdx]) {
+                return sess.shots[tachi][archerIdx][arrowIdx] || null;
+            }
+            return null;
+        }
+
+        function saveShot(dateStr, tachi, archerIdx, arrowIdx, shotObj) {
+            const sess = window.appState.sessions[dateStr];
+            if (!sess) return;
+            if (!sess.shots) sess.shots = {};
+            if (!sess.shots[tachi]) sess.shots[tachi] = {};
+            if (!sess.shots[tachi][archerIdx]) sess.shots[tachi][archerIdx] = [];
+            sess.shots[tachi][archerIdx][arrowIdx] = shotObj;
+
+            if (window.saveDataToLocalAndCloud) {
+                window.saveDataToLocalAndCloud();
+            }
+        }
+
+        function drawTargetCanvas() {
+            const canvas = document.getElementById('targetCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            const size = 500;
+            canvas.width = size;
+            canvas.height = size;
+
+            const center = size / 2;
+            const radius = size * 0.45;
+
+            ctx.clearRect(0, 0, size, size);
+
+            if (window.appState.targetType === 'kasumi') {
+                const rings = [1.0, 0.72, 0.52, 0.32, 0.12];
+                const colors = ['#FFFFFF', '#1E293B', '#FFFFFF', '#1E293B', '#FFFFFF'];
+
+                ctx.beginPath();
+                ctx.arc(center, center, radius + 10, 0, Math.PI * 2);
+                ctx.fillStyle = '#E2E8F0';
+                ctx.fill();
+
+                rings.forEach((r, idx) => {
+                    ctx.beginPath();
+                    ctx.arc(center, center, radius * r, 0, Math.PI * 2);
+                    ctx.fillStyle = colors[idx];
+                    ctx.fill();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#1E293B';
+                    ctx.stroke();
+                });
+
+                ctx.beginPath();
+                ctx.arc(center, center, radius * 0.04, 0, Math.PI * 2);
+                ctx.fillStyle = '#1E293B';
+                ctx.fill();
+
+            } else if (window.appState.targetType === 'iro') {
+                const rings = [1.0, 0.8, 0.6, 0.4, 0.2];
+                const colors = ['#FFFFFF', '#1E293B', '#2563EB', '#DC2626', '#FACC15'];
+
+                rings.forEach((r, idx) => {
+                    ctx.beginPath();
+                    ctx.arc(center, center, radius * r, 0, Math.PI * 2);
+                    ctx.fillStyle = colors[idx];
+                    ctx.fill();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#334155';
+                    ctx.stroke();
+                });
+            } else {
+                ctx.beginPath();
+                ctx.arc(center, center, radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#1E293B';
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(center, center, radius * 0.6, 0, Math.PI * 2);
+                ctx.strokeStyle = '#DC2626';
+                ctx.lineWidth = 12;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(center, center, radius * 0.2, 0, Math.PI * 2);
+                ctx.fillStyle = '#DC2626';
+                ctx.fill();
+            }
+
+            const currentShot = getShot(window.appState.currentDate, window.appState.currentTachi, window.appState.selectedArcherIndex, window.appState.selectedArrowIndex);
+            if (currentShot) {
+                const shotX = center + currentShot.x * radius;
+                const shotY = center + currentShot.y * radius;
+
+                ctx.beginPath();
+                ctx.arc(shotX, shotY, 14, 0, Math.PI * 2);
+                ctx.fillStyle = currentShot.isHit ? 'rgba(220, 38, 38, 0.9)' : 'rgba(30, 41, 59, 0.9)';
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.stroke();
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(currentShot.isHit ? '◯' : '✕', shotX, shotY);
+            }
+        }
+
+        document.getElementById('targetCanvas')?.addEventListener('pointerdown', function(e) {
+            const rect = this.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            const size = rect.width;
+            const center = size / 2;
+            const radius = size * 0.45;
+
+            const normX = (clickX - center) / radius;
+            const normY = (clickY - center) / radius;
+
+            const dist = Math.sqrt(normX * normX + normY * normY);
+            const isHit = dist <= 1.0;
+
+            saveShot(window.appState.currentDate, window.appState.currentTachi, window.appState.selectedArcherIndex, window.appState.selectedArrowIndex, {
+                x: normX,
+                y: normY,
+                isHit: isHit,
+                timestamp: Date.now()
+            });
+
+            drawTargetCanvas();
+            updateCurrentSelectionDisplay();
+
+            if (document.getElementById('auto-advance-check').checked) {
+                advanceToNext();
+            }
+        });
+
+        function setManualResult(type) {
+            const isHit = (type === 'hit');
+            const existingShot = getShot(window.appState.currentDate, window.appState.currentTachi, window.appState.selectedArcherIndex, window.appState.selectedArrowIndex);
+            
+            const x = existingShot ? existingShot.x : 0;
+            const y = existingShot ? existingShot.y : 0;
+
+            saveShot(window.appState.currentDate, window.appState.currentTachi, window.appState.selectedArcherIndex, window.appState.selectedArrowIndex, {
+                x: x,
+                y: y,
+                isHit: isHit,
+                timestamp: Date.now()
+            });
+
+            drawTargetCanvas();
+            updateCurrentSelectionDisplay();
+
+            if (document.getElementById('auto-advance-check').checked) {
+                advanceToNext();
+            }
+        }
+
+        function advanceToNext() {
+            const session = getCurrentSession();
+            if (window.appState.selectedArrowIndex < 3) {
+                window.appState.selectedArrowIndex++;
+            } else {
+                window.appState.selectedArrowIndex = 0;
+                if (window.appState.selectedArcherIndex < session.archers.length - 1) {
+                    window.appState.selectedArcherIndex++;
+                }
+            }
+            renderArcherSelectors();
+            renderArrowSelectors();
+            updateCurrentSelectionDisplay();
+            drawTargetCanvas();
+        }
+
+        function navigateArcher(dir) {
+            const session = getCurrentSession();
+            const newIdx = window.appState.selectedArcherIndex + dir;
+            if (newIdx >= 0 && newIdx < session.archers.length) {
+                window.appState.selectedArcherIndex = newIdx;
+                renderArcherSelectors();
+                updateCurrentSelectionDisplay();
+                drawTargetCanvas();
+            }
+        }
+
+        function undoLastShot() {
+            saveShot(window.appState.currentDate, window.appState.currentTachi, window.appState.selectedArcherIndex, window.appState.selectedArrowIndex, null);
+            drawTargetCanvas();
+            updateCurrentSelectionDisplay();
+        }
+
+        function clearCurrentArcherShots() {
+            const sess = getCurrentSession();
+            if (sess.shots && sess.shots[window.appState.currentTachi]) {
+                sess.shots[window.appState.currentTachi][window.appState.selectedArcherIndex] = [null, null, null, null];
+            }
+            if (window.saveDataToLocalAndCloud) window.saveDataToLocalAndCloud();
+            drawTargetCanvas();
+            updateCurrentSelectionDisplay();
+        }
+
+        function changeCurrentTachi(val) {
+            window.appState.currentTachi = parseInt(val);
+            drawTargetCanvas();
+            updateCurrentSelectionDisplay();
+        }
+
+        function changeTargetType(type) {
+            window.appState.targetType = type;
+            drawTargetCanvas();
+        }
+
+        function renderScoreboard() {
+            const thead = document.getElementById('scoreboard-table-head');
+            const tbody = document.getElementById('scoreboard-table-body');
+            const tfoot = document.getElementById('scoreboard-table-foot');
+            if (!thead || !tbody || !tfoot) return;
+            
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+            tfoot.innerHTML = '';
+
+            const session = getCurrentSession();
+
+            let maxTachi = 2;
+            for (let t = 1; t <= 10; t++) {
+                const tachiShots = (session.shots && session.shots[t]) ? session.shots[t] : {};
+                let hasShot = false;
+                session.archers.forEach((_, aIdx) => {
+                    if (tachiShots[aIdx] && tachiShots[aIdx].some(s => s !== null)) {
+                        hasShot = true;
+                    }
+                });
+                if (hasShot && t > maxTachi) {
+                    maxTachi = t;
+                }
+            }
+
+            let headRow1 = `<tr class="bg-slate-900 text-white text-xs">
+                <th rowspan="2" class="p-2 border border-slate-700 min-w-[110px] sticky left-0 bg-slate-900 z-10">生徒名</th>`;
+            let headRow2 = `<tr class="bg-slate-800 text-slate-200 text-[11px]">`;
+
+            for (let t = 1; t <= maxTachi; t++) {
+                headRow1 += `<th colspan="5" class="p-1.5 border border-slate-700 bg-slate-800">第 ${t} 立</th>`;
+                headRow2 += `<th class="p-1 border border-slate-700 w-7">1</th>
+                             <th class="p-1 border border-slate-700 w-7">2</th>
+                             <th class="p-1 border border-slate-700 w-7">3</th>
+                             <th class="p-1 border border-slate-700 w-7">4</th>
+                             <th class="p-1 border border-slate-700 w-9 font-bold bg-slate-700 text-amber-300">計</th>`;
+            }
+
+            headRow1 += `<th colspan="2" class="p-1.5 border border-slate-700 bg-slate-900 text-amber-400">総的中結果</th></tr>`;
+            headRow2 += `<th class="p-1 border border-slate-700 min-w-[60px] bg-slate-800 text-amber-300">総的中</th>
+                         <th class="p-1 border border-slate-700 min-w-[65px] bg-slate-800 text-amber-300">的中率</th></tr>`;
+
+            thead.innerHTML = headRow1 + headRow2;
+
+            const tachiTotals = Array(maxTachi + 1).fill(0);
+            const tachiShotsCounts = Array(maxTachi + 1).fill(0);
+            let grandTotalHits = 0;
+            let grandTotalShots = 0;
+
+            session.archers.forEach((archerName, aIdx) => {
+                const tr = document.createElement('tr');
+                tr.className = aIdx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50 hover:bg-slate-100';
+
+                let rowHtml = `<td class="border border-slate-300 p-2 font-bold text-slate-800 text-xs text-left px-3 sticky left-0 bg-inherit shadow-sm">${aIdx + 1}. ${archerName}</td>`;
+
+                let archerGrandHits = 0;
+                let archerGrandShots = 0;
+
+                for (let t = 1; t <= maxTachi; t++) {
+                    const tachiShots = (session.shots && session.shots[t] && session.shots[t][aIdx]) ? session.shots[t][aIdx] : [];
+                    let tachiHits = 0;
+
+                    for (let arrowIdx = 0; arrowIdx < 4; arrowIdx++) {
+                        const shot = tachiShots[arrowIdx];
+                        if (shot) {
+                            archerGrandShots++;
+                            tachiShotsCounts[t]++;
+                            if (shot.isHit) {
+                                tachiHits++;
+                                archerGrandHits++;
+                                tachiTotals[t]++;
+                                rowHtml += `<td class="border border-slate-300 p-1 text-center font-bold text-red-600 text-base">◯</td>`;
+                            } else {
+                                rowHtml += `<td class="border border-slate-300 p-1 text-center font-bold text-slate-700 text-base">✕</td>`;
+                            }
+                        } else {
+                            rowHtml += `<td class="border border-slate-300 p-1 text-center text-slate-300">・</td>`;
+                        }
+                    }
+
+                    rowHtml += `<td class="border border-slate-300 p-1 text-center font-bold text-xs bg-amber-50/50 text-slate-800">${tachiHits}</td>`;
+                }
+
+                grandTotalHits += archerGrandHits;
+                grandTotalShots += archerGrandShots;
+
+                const acc = archerGrandShots > 0 ? `${Math.round((archerGrandHits / archerGrandShots) * 100)}%` : '-';
+                rowHtml += `<td class="border border-slate-300 p-1 text-center font-extrabold text-red-600 text-sm bg-red-50/40">${archerGrandHits} 中</td>`;
+                rowHtml += `<td class="border border-slate-300 p-1 text-center font-bold text-xs text-slate-700 bg-slate-100">${acc}</td>`;
+
+                tr.innerHTML = rowHtml;
+                tbody.appendChild(tr);
+            });
+
+            let footHtml = `<tr class="bg-slate-900 text-white text-xs">
+                <td class="p-2 border border-slate-800 text-right font-bold sticky left-0 bg-slate-900">立ち別的中合計:</td>`;
+
+            for (let t = 1; t <= maxTachi; t++) {
+                const rate = tachiShotsCounts[t] > 0 ? `${Math.round((tachiTotals[t] / tachiShotsCounts[t]) * 100)}%` : '0%';
+                footHtml += `<td colspan="5" class="p-2 border border-slate-800 text-center font-bold text-amber-400">
+                    ${tachiTotals[t]} 中 <span class="text-[10px] text-slate-300">(${rate})</span>
+                </td>`;
+            }
+
+            const overallAcc = grandTotalShots > 0 ? `${Math.round((grandTotalHits / grandTotalShots) * 100)}%` : '0%';
+            footHtml += `<td class="p-2 border border-slate-800 text-center font-extrabold text-base text-amber-400 bg-slate-800">${grandTotalHits} 中</td>`;
+            footHtml += `<td class="p-2 border border-slate-800 text-center font-bold text-xs text-amber-300 bg-slate-800">${overallAcc}</td></tr>`;
+
+            tfoot.innerHTML = footHtml;
+        }
+
+        function renderAnalytics() {
+            const periodSelect = document.getElementById('analytics-period-select');
+            if (!periodSelect) return;
+            const periodVal = periodSelect.value;
+            const allDates = Object.keys(window.appState.sessions).sort();
+            const today = new Date();
+            let startDate = new Date(0);
+
+            if (periodVal === 'today') {
+                startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            } else if (periodVal === '10days') {
+                startDate = new Date(today.getTime() - (10 * 24 * 60 * 60 * 1000));
+            } else if (periodVal === '30days') {
+                startDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+            }
+
+            const archerStatsMap = {};
+            let totalShotsAll = 0;
+            let totalHitsAll = 0;
+            let totalKaichuAll = 0;
+            let totalHanyaAll = 0;
+            let totalTachisAll = 0;
+            let allPointsAll = [];
+
+            allDates.forEach(dStr => {
+                const dObj = new Date(dStr);
+                if (dObj < startDate && periodVal !== 'all') return;
+
+                const sess = window.appState.sessions[dStr];
+                if (!sess || !sess.archers) return;
+
+                sess.archers.forEach((aName, aIdx) => {
+                    if (!archerStatsMap[aName]) {
+                        archerStatsMap[aName] = {
+                            name: aName,
+                            shots: 0,
+                            hits: 0,
+                            kaichu: 0,
+                            hanya: 0,
+                            tachis: 0,
+                            points: []
+                        };
+                    }
+
+                    for (let t = 1; t <= 10; t++) {
+                        const tachiShots = (sess.shots && sess.shots[t]) ? sess.shots[t] : {};
+                        const archerShots = tachiShots[aIdx] || [];
+                        let localHits = 0;
+                        let localShots = 0;
+
+                        archerShots.forEach(shot => {
+                            if (shot) {
+                                archerStatsMap[aName].shots++;
+                                localShots++;
+                                totalShotsAll++;
+                                if (shot.isHit) {
+                                    archerStatsMap[aName].hits++;
+                                    totalHitsAll++;
+                                }
+                                archerStatsMap[aName].points.push(shot);
+                                allPointsAll.push(shot);
+                            }
+                        });
+
+                        if (localShots === 4) {
+                            archerStatsMap[aName].tachis++;
+                            totalTachisAll++;
+                            if (localHits === 4) {
+                                archerStatsMap[aName].kaichu++;
+                                totalKaichuAll++;
+                            } else if (localHits === 2) {
+                                archerStatsMap[aName].hanya++;
+                                totalHanyaAll++;
+                            }
+                        }
+                    }
+                });
+            });
+
+            // カード数値の更新
+            document.getElementById('stat-total-shots').innerText = totalShotsAll;
+            document.getElementById('stat-hits').innerText = totalHitsAll;
+            const overallAcc = totalShotsAll > 0 ? Math.round((totalHitsAll / totalShotsAll) * 100) : 0;
+            document.getElementById('stat-accuracy').innerText = `${overallAcc}%`;
+
+            document.getElementById('stat-kaichu').innerText = totalKaichuAll;
+            const kaichuRate = totalTachisAll > 0 ? Math.round((totalKaichuAll / totalTachisAll) * 100) : 0;
+            document.getElementById('stat-kaichu-rate').innerText = `${kaichuRate}%`;
+
+            document.getElementById('stat-hanya').innerText = totalHanyaAll;
+            const hanyaRate = totalTachisAll > 0 ? Math.round((totalHanyaAll / totalTachisAll) * 100) : 0;
+            document.getElementById('stat-hanya-rate').innerText = `${hanyaRate}%`;
+
+            // 生徒全員一括成績表の更新
+            const tbody = document.getElementById('analytics-table-body');
+            if (tbody) {
+                tbody.innerHTML = '';
+                const archerList = Object.values(archerStatsMap);
+
+                if (archerList.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-slate-400">データがありません</td></tr>`;
+                } else {
+                    archerList.forEach(stat => {
+                        const acc = stat.shots > 0 ? `${Math.round((stat.hits / stat.shots) * 100)}%` : '0%';
+                        const kRate = stat.tachis > 0 ? `${Math.round((stat.kaichu / stat.tachis) * 100)}%` : '0%';
+                        const hRate = stat.tachis > 0 ? `${Math.round((stat.hanya / stat.tachis) * 100)}%` : '0%';
+
+                        const tr = document.createElement('tr');
+                        tr.className = 'border-b border-slate-200 hover:bg-slate-50';
+                        tr.innerHTML = `
+                            <td class="p-2 text-left font-bold px-3">${stat.name}</td>
+                            <td class="p-2">${stat.shots}</td>
+                            <td class="p-2 font-bold text-red-600">${stat.hits}</td>
+                            <td class="p-2 font-bold">${acc}</td>
+                            <td class="p-2 text-amber-700">${stat.kaichu}回 <span class="text-[10px] text-slate-400">(${kRate})</span></td>
+                            <td class="p-2 text-blue-700">${stat.hanya}回 <span class="text-[10px] text-slate-400">(${hRate})</span></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            }
+
+            drawAnalyticsCanvas(allPointsAll);
+            generateAdvice(allPointsAll);
+        }
+
+        function drawAnalyticsCanvas(points) {
+            const canvas = document.getElementById('analyticsCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            const size = 300;
+            canvas.width = size;
+            canvas.height = size;
+            const center = size / 2;
+            const radius = size * 0.45;
+
+            ctx.clearRect(0, 0, size, size);
+
+            // 霞的の描画
+            const rings = [1.0, 0.72, 0.52, 0.32, 0.12];
+            const colors = ['#FFFFFF', '#1E293B', '#FFFFFF', '#1E293B', '#FFFFFF'];
+
+            rings.forEach((r, idx) => {
+                ctx.beginPath();
+                ctx.arc(center, center, radius * r, 0, Math.PI * 2);
+                ctx.fillStyle = colors[idx];
+                ctx.fill();
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = '#334155';
+                ctx.stroke();
+            });
+
+            if (!points || points.length === 0) return;
+
+            let sumX = 0;
+            let sumY = 0;
+            let validPointsCount = 0;
+
+            points.forEach(pt => {
+                if (typeof pt.x === 'number' && typeof pt.y === 'number') {
+                    const px = center + pt.x * radius;
+                    const py = center + pt.y * radius;
+
+                    sumX += pt.x;
+                    sumY += pt.y;
+                    validPointsCount++;
+
+                    ctx.beginPath();
+                    ctx.arc(px, py, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = pt.isHit ? 'rgba(220, 38, 38, 0.7)' : 'rgba(30, 41, 59, 0.7)';
+                    ctx.fill();
+                }
+            });
+
+            if (validPointsCount > 0) {
+                const avgX = sumX / validPointsCount;
+                const avgY = sumY / validPointsCount;
+                const cogX = center + avgX * radius;
+                const cogY = center + avgY * radius;
+
+                // 重心（着弾傾向）の描画
+                ctx.beginPath();
+                ctx.arc(cogX, cogY, 10, 0, Math.PI * 2);
+                ctx.strokeStyle = '#F59E0B';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(cogX, cogY, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#F59E0B';
+                ctx.fill();
+            }
+        }
+
+        function generateAdvice(points) {
+            const adviceEl = document.getElementById('analytics-advice-text');
+            if (!adviceEl) return;
+
+            if (!points || points.length === 0) {
+                adviceEl.innerText = "データが未登録です。看的盤から着弾位置を記録すると自動で癖や重心が分析されます。";
+                return;
+            }
+
+            let sumX = 0, sumY = 0, count = 0;
+            points.forEach(pt => {
+                if (typeof pt.x === 'number') {
+                    sumX += pt.x;
+                    sumY += pt.y;
+                    count++;
+                }
+            });
+
+            if (count === 0) {
+                adviceEl.innerText = "座標データの記録された行射がありません。";
+                return;
+            }
+
+            const avgX = sumX / count;
+            const avgY = sumY / count;
+
+            let adviceText = "全体重心：";
+            if (Math.abs(avgX) < 0.15 && Math.abs(avgY) < 0.15) {
+                adviceText += "的の中心に安定して集まっています。この調子で離れと狙いを維持しましょう。";
+            } else {
+                if (avgY < -0.15) adviceText += "【上寄り】（物見の上がり、狙いの高まり、または勝手の離れが高くなっている傾向）";
+                else if (avgY > 0.15) adviceText += "【下寄り】（狙いの低い、または押手の落ち、緩み離れの傾向）";
+
+                if (avgX < -0.15) adviceText += "＋【前寄り/左】（押手の突きすぎ、または角見のききすぎ）";
+                else if (avgX > 0.15) adviceText += "＋【後ろ寄り/右】（妻手の引き不足、または角見の不十分）";
+            }
+
+            adviceEl.innerText = adviceText;
+        }
+
+        function toggleTimer() {
+            const btnText = document.getElementById('timer-btn-text');
+            const icon = document.getElementById('timer-icon');
+
+            if (isTimerRunning) {
+                clearInterval(timerInterval);
+                isTimerRunning = false;
+                btnText.innerText = "再開";
+                icon.className = "fa-solid fa-play";
+            } else {
+                isTimerRunning = true;
+                btnText.innerText = "一時停止";
+                icon.className = "fa-solid fa-pause";
+
+                timerInterval = setInterval(() => {
+                    if (timerSeconds > 0) {
+                        timerSeconds--;
+                        updateTimerDisplay();
+                    } else {
+                        clearInterval(timerInterval);
+                        isTimerRunning = false;
+                        btnText.innerText = "スタート";
+                        icon.className = "fa-solid fa-play";
+                    }
+                }, 1000);
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            timerSeconds = 300;
+            updateTimerDisplay();
+            document.getElementById('timer-btn-text').innerText = "スタート";
+            document.getElementById('timer-icon').className = "fa-solid fa-play";
+        }
+
+        function setTimerPreset(sec) {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            timerSeconds = sec;
+            updateTimerDisplay();
+            document.getElementById('timer-btn-text').innerText = "スタート";
+            document.getElementById('timer-icon').className = "fa-solid fa-play";
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(timerSeconds / 60);
+            const secs = timerSeconds % 60;
+            document.getElementById('timer-display').innerText = 
+                `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function renderSettingsArcherInputs() {
+            const session = getCurrentSession();
+            const container = document.getElementById('archer-names-inputs');
+            if (!container) return;
+            container.innerHTML = '';
+
+            session.archers.forEach((name, idx) => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center space-x-2';
+                div.innerHTML = `
+                    <span class="text-xs font-bold text-slate-500 w-12 shrink-0">${idx + 1}番手:</span>
+                    <input type="text" value="${name}" onchange="updateArcherName(${idx}, this.value)" class="flex-grow text-xs font-bold bg-slate-50 border border-slate-300 rounded p-1.5 focus:ring-2 focus:ring-slate-900">
+                    <button onclick="removeArcher(${idx})" class="p-1.5 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function updateArcherName(idx, newName) {
+            const session = getCurrentSession();
+            session.archers[idx] = newName || `${idx + 1}番手`;
+            renderArcherSelectors();
+            updateCurrentSelectionDisplay();
+            if (window.saveDataToLocalAndCloud) window.saveDataToLocalAndCloud();
+        }
+
+        function removeArcher(idx) {
+            const session = getCurrentSession();
+            if (session.archers.length <= 1) return;
+            session.archers.splice(idx, 1);
+            if (window.appState.selectedArcherIndex >= session.archers.length) {
+                window.appState.selectedArcherIndex = session.archers.length - 1;
+            }
+            renderArcherSelectors();
+            renderSettingsArcherInputs();
+            updateCurrentSelectionDisplay();
+            if (window.saveDataToLocalAndCloud) window.saveDataToLocalAndCloud();
+        }
+
+        function clearAllData() {
+            const dateStr = window.appState.currentDate;
+            window.appState.sessions[dateStr] = {
+                archers: ["1番手 (大前)", "2番手 (二的)", "3番手 (中立)", "4番手 (落前)", "5番手 (大落)"],
+                shots: {}
+            };
+            if (window.saveDataToLocalAndCloud) window.saveDataToLocalAndCloud();
+            initUI();
+            drawTargetCanvas();
+            renderScoreboard();
+            renderAnalytics();
+            closeModal('settings-modal');
+        }
+
+        function openModal(id) {
+            document.getElementById(id)?.classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id)?.classList.add('hidden');
+        }
+
+        function showConfirmToast(message, actionFn) {
+            const msgEl = document.getElementById('confirm-toast-message');
+            const btnEl = document.getElementById('confirm-toast-action-btn');
+            if (!msgEl || !btnEl) return;
+
+            msgEl.innerText = message;
+            btnEl.onclick = () => {
+                actionFn();
+                closeModal('confirm-toast-modal');
+            };
+            openModal('confirm-toast-modal');
+        }
+
+        function triggerPrint() {
+            document.getElementById('print-title-display').innerText = '弓道 看的・的中成績記録表（本日分）';
+            document.getElementById('print-date-display').innerText = window.appState.currentDate;
+            window.print();
+        }
+
+        function triggerAnalyticsPrint() {
+            switchTab('analytics');
+            document.getElementById('print-title-display').innerText = '弓道 生徒別期間成績・矢どころ分析レポート';
+            document.getElementById('print-date-display').innerText = `集計日 ${new Date().toISOString().split('T')[0]}`;
+            window.print();
+        }
+
+        function exportToCSV() {
+            const session = getCurrentSession();
+            let csv = '\uFEFF生徒名,立ち番号,第1矢,第2矢,第3矢,第4矢,立的中数\n';
+
+            session.archers.forEach((name, aIdx) => {
+                for (let t = 1; t <= 10; t++) {
+                    const tachiShots = (session.shots && session.shots[t] && session.shots[t][aIdx]) ? session.shots[t][aIdx] : [];
+                    if (tachiShots.some(s => s !== null)) {
+                        let rowHits = 0;
+                        const arrowResults = [];
+                        for (let a = 0; a < 4; a++) {
+                            const shot = tachiShots[a];
+                            if (shot) {
+                                if (shot.isHit) {
+                                    rowHits++;
+                                    arrowResults.push('◯');
+                                } else {
+                                    arrowResults.push('✕');
+                                }
+                            } else {
+                                arrowResults.push('-');
+                            }
+                        }
+                        csv += `"${name}",第${t}立,${arrowResults.join(',')},${rowHits}\n`;
+                    }
+                }
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `弓道的中記録_${window.appState.currentDate}.csv`;
+            link.click();
+        }
+    </script>
+</body>
+</html>
